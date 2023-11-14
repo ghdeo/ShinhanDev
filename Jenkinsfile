@@ -1,55 +1,58 @@
 pipeline {
     agent any
-
+    
     environment {
-        // Docker Hub 계정 정보
-        DOCKER_HUB_CREDENTIALS = 'docker-hub-credentials-id'
-        // Docker 이미지 이름 및 태그
-        DOCKER_IMAGE_NAME = 'your-docker-image-name'
-        DOCKER_IMAGE_TAG = 'latest'
+        REPOSITORY  = 'goldencorn7'
+        IMAGE       = 'shinhan'
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout from GitHub') {
             steps {
-                // Git 저장소에서 소스 코드 체크아웃
-                checkout scm
+                // GitHub 저장소에서 소스 코드 체크아웃
+                script {
+                    checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'https://github.com/ghdeo/ShinhanDev.git']]])
+                }
             }
         }
-
+        
         stage('Build Docker Image') {
             steps {
                 // Dockerfile이 있는 디렉토리로 이동
-                dir('path/to/dockerfile') {
+                dir('.') {
                     // Docker 이미지 빌드
                     script {
-                        docker.build("${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}")
+                        def dockerfilePath = '.' // Dockerfile이 있는 디렉토리의 상대 경로
+                        def contextPath = '.' // 빌드 컨텍스트의 상대 경로
+                        def destination = "${REPOSITORY}/${IMAGE}:${GIT_COMMIT}"
+
+                        // executor 명령어 대신 docker build 명령어 사용
+                        sh "docker build -t ${destination} -f ${dockerfilePath}/Dockerfile ${contextPath}"
                     }
                 }
             }
         }
-
-        stage('Push to Docker Hub') {
+        stage('GitOps') {
             steps {
-                // Docker 이미지를 Docker Hub에 푸시
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', DOCKER_HUB_CREDENTIALS) {
-                        docker.image("${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}").push()
+                    withCredentials([usernamePassword(credentialsId: 'git_cre', passwordVariable: 'password', usernameVariable: 'username')]) {
+                        container('gitops') {
+                            git credentialsId: 'git_cre', url: 'https://github.com/junkmm/GitopsDummy.git', branch: 'main'
+                            sh """
+                            git init
+                            git config --global --add safe.directory /home/jenkins/agent/workspace/demo
+                            git config --global user.email 'jenkins@jenkins.com'
+                            git config --global user.name 'jenkins'
+                            sed -i 's@nginx:.*@goldencorn7/shinhan:${GIT_COMMIT}@g' deploy.yaml
+                            git add deploy.yaml
+                            git commit -m 'Update: Image ${GIT_COMMIT}'
+                            git remote set-url origin https://${username}:${password}@github.com/ghdeo/ShinhanGitops.git
+                            git push origin main
+                            """
+                        }
                     }
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            // 빌드 성공 시 추가 작업 수행
-            echo 'Build and push to Docker Hub successful!'
-        }
-
-        failure {
-            // 빌드 실패 시 추가 작업 수행
-            echo 'Build or push to Docker Hub failed!'
         }
     }
 }
