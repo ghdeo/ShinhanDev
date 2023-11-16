@@ -62,8 +62,8 @@ spec:
                         container('kubectl') {
                             sh """
                             export KUBECONFIG=\$KUBECONFIG
-                            kubectl set image deployment/test test=${REPOSITORY}/${IMAGE}:${GIT_COMMIT} -n test
-                            kubectl rollout restart deployment/test -n test
+                            kubectl set image deployment/test test=${REPOSITORY}/${IMAGE}:${GIT_COMMIT} -n demo
+                            kubectl rollout restart deployment/test -n demo
                             """
                         }
                     }
