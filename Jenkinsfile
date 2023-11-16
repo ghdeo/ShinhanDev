@@ -1,53 +1,69 @@
 pipeline {
-    agent any
-    
+    agent {
+        kubernetes {
+            yaml """
+kind: Pod
+metadata:
+  name: kaniko
+spec:
+  nodeName: k8s-worker01
+  dnsPolicy: Default
+  containers:
+  - name: kaniko
+    namespace: jenkins
+    image: gcr.io/kaniko-project/executor:debug
+    imagePullPolicy: Always
+    command:
+    - /busybox/cat
+    tty: true
+    volumeMounts:
+      - name: jenkins-docker-cfg
+        mountPath: /kaniko/.docker
+  - name: kubectl
+    namespace: jenkins
+    image: bitnami/kubectl:latest
+    imagePullPolicy: Always
+    command:
+    - /bin/sh
+    tty: true
+    securityContext:
+      runAsUser: 0
+  volumes:
+  - name: jenkins-docker-cfg
+    namespace: jenkins
+    projected:
+      sources:
+      - secret:
+          name: registry-credentials
+          items:
+            - key: .dockerconfigjson
+              path: config.json
+"""
+        }
+    }
     environment {
         REPOSITORY  = 'goldencorn7'
         IMAGE       = 'shinhan'
     }
-
     stages {
-        stage('Checkout from GitHub') {
+        stage('Build Docker image') {
             steps {
-                // GitHub 저장소에서 소스 코드 체크아웃
-                script {
-                    checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'https://github.com/ghdeo/ShinhanDev.git']]])
-                }
-            }
-        }
-        
-        stage('Build Docker Image') {
-            steps {
-                // Dockerfile이 있는 디렉토리로 이동
-                dir('.') {
-                    // Docker 이미지 빌드
+                container('kaniko') {
                     script {
-                        def dockerfilePath = '.' // Dockerfile이 있는 디렉토리의 상대 경로
-                        def contextPath = '.' // 빌드 컨텍스트의 상대 경로
-                        def destination = "${REPOSITORY}/${IMAGE}:${GIT_COMMIT}"
-
-                        // executor 명령어 대신 docker build 명령어 사용
-                        sh "docker build -t ${destination} -f ${dockerfilePath}/Dockerfile ${contextPath}"
+                        sh "executor --dockerfile=Dockerfile --context=./ --destination=${REPOSITORY}/${IMAGE}:${GIT_COMMIT}"
                     }
                 }
             }
         }
-        stage('GitOps') {
+        stage('Deploy') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'git_cre', passwordVariable: 'password', usernameVariable: 'username')]) {
-                        container('gitops') {
-                            git credentialsId: 'git_cre', url: 'https://github.com/junkmm/GitopsDummy.git', branch: 'main'
+                    withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                        container('kubectl') {
                             sh """
-                            git init
-                            git config --global --add safe.directory /home/jenkins/agent/workspace/demo
-                            git config --global user.email 'jenkins@jenkins.com'
-                            git config --global user.name 'jenkins'
-                            sed -i 's@nginx:.*@goldencorn7/shinhan:${GIT_COMMIT}@g' deploy.yaml
-                            git add deploy.yaml
-                            git commit -m 'Update: Image ${GIT_COMMIT}'
-                            git remote set-url origin https://${username}:${password}@github.com/ghdeo/ShinhanGitops.git
-                            git push origin main
+                            export KUBECONFIG=\$KUBECONFIG
+                            kubectl set image deployment/test test=${REPOSITORY}/${IMAGE}:${GIT_COMMIT} -n test
+                            kubectl rollout restart deployment/test -n test
                             """
                         }
                     }
