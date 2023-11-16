@@ -51,7 +51,7 @@ spec:
                 container('kaniko') {
                     script {
                         withCredentials([usernamePassword(credentialsId: 'docker_cre', usernameVariable: 'goldencorn7', passwordVariable: 'day25477!')]){
-                        sh "executor --dockerfile=Dockerfile --context=./ --destination=${REPOSITORY}/${IMAGE}:${GIT_COMMIT}"
+                        sh "executor --dockerfile=Dockerfile --context=./ --destination=${REPOSITORY}/${IMAGE}:latest"
                     }
                 }
             }
