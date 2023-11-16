@@ -55,7 +55,6 @@ spec:
                 }
             }
         }
-    }
         stage('Deploy') {
             steps {
                 script {
