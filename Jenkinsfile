@@ -64,12 +64,17 @@ spec:
                             export KUBECONFIG=\$KUBECONFIG
                             kubectl set image deployment/test test=${REPOSITORY}/${IMAGE}:${GIT_COMMIT} -n demo
                             kubectl rollout restart deployment/test -n demo
-                            slackSend(color: '#00FF00', message: "Deployment Successful! (${env.JOB_URL})")
                             """
                         }
                     }
                 }
             }
+        }
+        stage('Success Deploy'){
+          steps{
+            slackSend(color: '#00FF00', message: "Deployment Successful! (${env.JOB_URL})")
+            }
+          }
         }
     }
 }
