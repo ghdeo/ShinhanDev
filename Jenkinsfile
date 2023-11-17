@@ -74,7 +74,6 @@ spec:
           steps{
             slackSend(color: '#00FF00', message: "Deployment Successful! (${env.JOB_URL})")
             }
-          }
-        }
+         }
     }
 }
